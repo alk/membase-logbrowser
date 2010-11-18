@@ -3,11 +3,30 @@
 require 'rubygems'
 gem 'activesupport'
 require 'active_support/core_ext'
+require 'escape'
 
 class Log
   extend ActiveSupport::Memoizable
 
   attr_reader :reject_res
+
+  def self.read(filename)
+    filter = nil
+    case filename
+    when /.xz$/
+      filter = 'xz -dc'
+    when /.gz$/
+      filter = 'gzip -dc'
+    when /.bz$/
+      filter = 'bzip -dc'
+    end
+    contents = unless filter
+                 IO.read(filename)
+               else
+                 IO.popen("#{filter} <#{Escape.shell_single_word filename}", "r") {|f| f.read}
+               end
+    self.new(contents)
+  end
 
   def initialize(contents)
     @contents = contents
@@ -61,7 +80,7 @@ class Log
 end
 
 raise "Need diag!" unless ARGV[0]
-$log = Log.new(IO.read(ARGV[0]))
+$log = Log.read(ARGV[0])
 
 $log.reject_res << Log::REs::CONNECT_FROM_DISALLOWED_NODE
 $log.reject_res << Log::REs::DOCTOR_PERIODIC
