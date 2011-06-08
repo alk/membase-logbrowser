@@ -5,6 +5,8 @@ gem 'activesupport'
 require 'active_support/core_ext'
 require 'escape'
 
+$raw_logs = false
+
 class Log
   extend ActiveSupport::Memoizable
 
@@ -31,9 +33,13 @@ class Log
   def initialize(contents)
     @contents = contents
     @reject_res = []
-    raise "bad logs" unless contents =~ /^logs_node:\n-------------------------------$/
+    logs_raw =  if !$raw_logs
+                  raise "bad logs" unless contents =~ /^logs_node:\n-------------------------------$/
 
-    logs_raw = contents[$~.end(0)..-1].strip
+                  contents[$~.end(0)..-1].strip
+                else
+                  contents.strip
+                end
     splitted = logs_raw.split(/^([A-Z]+ REPORT.*\n#{'='*79})/)
     if splitted[0].empty?
       splitted.shift
@@ -76,7 +82,13 @@ class Log
     PULLING_CONFIG = /^Pulling config from: /
     JANITOR_VBUCKET_CHANGE = /^[a-zA-Z_@0-9.]+:ns_janitor:[0-9]+: Setting vbucket/
     JANITOR_KILLING_REPLICATORS = /^[a-zA-Z_@0-9.]+:ns_janitor:[0-9]+: Killing replicators for vbucket/
+    DISCO_CONFIG_ALL = /^ns_node_disco_confi_events config all/
   end
+end
+
+if ARGV[0] == '--raw'
+  ARGV.shift
+  $raw_logs = true
 end
 
 raise "Need diag!" unless ARGV[0]
@@ -88,6 +100,7 @@ $log.reject_res << Log::REs::STATS_PERIODIC
 $log.reject_res << Log::REs::PULLING_CONFIG
 $log.reject_res << Log::REs::JANITOR_VBUCKET_CHANGE
 $log.reject_res << Log::REs::JANITOR_KILLING_REPLICATORS
+$log.reject_res << Log::REs::DISCO_CONFIG_ALL
 
 gem 'sinatra'
 require 'sinatra'
@@ -102,7 +115,7 @@ div {overflow:auto;white-space:pre;font-family:monaco,monospace;font-size:12px;}
 #pagination {position: fixed; top: 0px; width: 100%; text-align: center; z-index: 9999; padding: 3px 0; margin: 0 0;}
 #pagination > * { background-color: #FFF1A8; font-size: 14px; padding: 3px 10px; margin: 0 0;}
 </style></head><body>
-<p id="pagination"><span>#{$log.pages.map {|i| "<a href='?p=#{i}'>#{i}</a>"}.join(' ')}</span></p>
+<p id="pagination"><span>#{$log.pages.map {|i| "<a href=\"?p=#{i}\">#{i}</a>"}.join(' ')}</span></p>
 <div>
 HERE
   out << $log.page_items(request['p']).map {|s| escape_html(s)}.join("\n</div><div>\n")
